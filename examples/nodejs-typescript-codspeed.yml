@@ -19,15 +19,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v3
-        with:
-          python-version: "3.9"
+      - uses: actions/setup-node@v3
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: npm install
 
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v4
         with:
           mode: simulation
-          run: pytest tests/ --codspeed
+          run: node -r esbuild-register benches/bench.ts
