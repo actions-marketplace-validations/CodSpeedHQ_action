@@ -8,7 +8,7 @@ author: "Arthur Pastel"
 inputs:
   run:
     description: "The command to run the benchmarks"
-    required: true
+    required: false
 
   mode:
     description: |
@@ -73,6 +73,14 @@ inputs:
     required: false
     default: "false"
 
+  go-runner-version:
+    description: "The version of the go-runner to use (e.g., 1.0.0, 1.0.0-beta.1). If not specified, the latest version will be installed"
+    required: false
+
+  config:
+    description: "Path to a CodSpeed configuration file (codspeed.yml). If not specified, the runner will look for a codspeed.yml file in the repository root."
+    required: false
+
 runs:
   using: "composite"
   steps:
@@ -103,6 +111,8 @@ runs:
       env:
         GH_MATRIX: "${{ toJson(matrix) }}"
         GH_STRATEGY: "${{ toJson(strategy) }}"
+        # This is needed to properly handle quotes and multiline commands in the 'run' input properly, rather than doing `RUN_INPUT_RUN=${{ inputs.run }}` in the script
+        CODSPEED_INPUT_RUN: ${{ inputs.run }}
       run: |
         # Validate required inputs
         # (custom message for smoother v4 migration)
@@ -134,54 +144,63 @@ runs:
           RUNNER_VERSION=$(echo "$RUNNER_VERSION" | sed 's/^v//')
         fi
 
-        # Install the CodSpeedHQ/runner
+        # Install the runner
         if [ "$VERSION_TYPE" = "latest" ]; then
-          curl -fsSL http://github.com/CodSpeedHQ/runner/releases/latest/download/codspeed-runner-installer.sh | bash -s -- --quiet
+          curl -fsSL https://codspeed.io/install.sh | bash -s -- --quiet
         elif [ "$VERSION_TYPE" = "branch" ]; then
           # Install from specific branch using cargo
           source $HOME/.cargo/env
-          cargo install --locked --git https://github.com/CodSpeedHQ/runner --branch "$RUNNER_VERSION" codspeed-runner
+          cargo install --locked --git https://github.com/CodSpeedHQ/codspeed --branch "$RUNNER_VERSION" codspeed-runner
         elif [ "$VERSION_TYPE" = "rev" ]; then
           # Install from specific commit/rev using cargo
           source $HOME/.cargo/env
-          cargo install --locked --git https://github.com/CodSpeedHQ/runner --rev "$RUNNER_VERSION" codspeed-runner
+          cargo install --locked --git https://github.com/CodSpeedHQ/codspeed --rev "$RUNNER_VERSION" codspeed-runner
         else
           # Release version
-          head_status=$(curl -I -fsSL -w "%{http_code}" -o /dev/null https://github.com/CodSpeedHQ/runner/releases/download/v$RUNNER_VERSION/codspeed-runner-installer.sh)
-          if [ "$head_status" -eq 404 ]; then
-            echo "Error: Version $RUNNER_VERSION is not available in https://github.com/CodSpeedHQ/runner/releases, please a correct version."
+          if ! install_script=$(curl -sSL --fail-with-body https://codspeed.io/v$RUNNER_VERSION/install.sh 2>/dev/null); then
+            error_msg=$(echo "$install_script" | jq -r '.error // empty' 2>/dev/null)
+            echo "::error title=Failed to install CodSpeed CLI::Installation of CodSpeed CLI with version $RUNNER_VERSION failed.%0AReason: ${error_msg:-$install_script}"
             exit 1
-          else
-            curl -fsSL https://github.com/CodSpeedHQ/runner/releases/download/v$RUNNER_VERSION/codspeed-runner-installer.sh | bash -s -- --quiet
           fi
+          echo "$install_script" | bash -s -- --quiet
         fi
 
-        # Get the runner arguments
-        RUNNER_ARGS=""
+        # Build the runner arguments array
+        RUNNER_ARGS=()
         if [ -n "${{ inputs.token }}" ]; then
-          RUNNER_ARGS="$RUNNER_ARGS --token ${{ inputs.token }}"
+          RUNNER_ARGS+=(--token "${{ inputs.token }}")
         fi
         if [ -n "${{ inputs.working-directory }}" ]; then
-          RUNNER_ARGS="$RUNNER_ARGS --working-directory=${{ inputs.working-directory }}"
+          RUNNER_ARGS+=(--working-directory="${{ inputs.working-directory }}")
         fi
         if [ -n "${{ inputs.upload-url }}" ]; then
-          RUNNER_ARGS="$RUNNER_ARGS --upload-url=${{ inputs.upload-url }}"
+          RUNNER_ARGS+=(--upload-url="${{ inputs.upload-url }}")
         fi
         if [ -n "${{ inputs.mode }}" ]; then
-          RUNNER_ARGS="$RUNNER_ARGS --mode=${{ inputs.mode }}"
+          RUNNER_ARGS+=(--mode="${{ inputs.mode }}")
         fi
         if [ -n "${{ inputs.instruments }}" ]; then
-          RUNNER_ARGS="$RUNNER_ARGS --instruments=${{ inputs.instruments }}"
+          RUNNER_ARGS+=(--instruments="${{ inputs.instruments }}")
         fi
         if [ -n "${{ inputs.mongo-uri-env-name }}" ]; then
-          RUNNER_ARGS="$RUNNER_ARGS --mongo-uri-env-name=${{ inputs.mongo-uri-env-name }}"
+          RUNNER_ARGS+=(--mongo-uri-env-name="${{ inputs.mongo-uri-env-name }}")
         fi
         if [ "${{ inputs.cache-instruments }}" = "true" ] && [ -n "${{ inputs.instruments-cache-dir }}" ]; then
-          RUNNER_ARGS="$RUNNER_ARGS --setup-cache-dir=${{ inputs.instruments-cache-dir }}"
+          RUNNER_ARGS+=(--setup-cache-dir="${{ inputs.instruments-cache-dir }}")
         fi
         if [ "${{ inputs.allow-empty }}" = "true" ]; then
-          RUNNER_ARGS="$RUNNER_ARGS --allow-empty"
+          RUNNER_ARGS+=(--allow-empty)
+        fi
+        if [ -n "${{ inputs.go-runner-version }}" ]; then
+          RUNNER_ARGS+=(--go-runner-version="${{ inputs.go-runner-version }}")
+        fi
+        if [ -n "${{ inputs.config }}" ]; then
+          RUNNER_ARGS+=(--config="${{ inputs.config }}")
+        fi
+
+        if [ -n "$CODSPEED_INPUT_RUN" ]; then
+          RUNNER_ARGS+=(-- "$CODSPEED_INPUT_RUN")
         fi
 
         # Run the benchmarks
-        codspeed run $RUNNER_ARGS -- '${{ inputs.run }}'
+        codspeed run "${RUNNER_ARGS[@]}"

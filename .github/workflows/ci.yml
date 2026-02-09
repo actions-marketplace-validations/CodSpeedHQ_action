@@ -50,6 +50,8 @@ jobs:
             if [ "$output" != "Hello" ]; then
               echo "Assertion failed: Expected 'Hello' but got '$output'"
               exit 1
+            else
+              echo "Environment variable check passed with $output."
             fi
       - name: Check action in a custom directory
         uses: ./
@@ -68,7 +70,8 @@ jobs:
             echo "Working";
             echo "with";
             echo "multiple lines";
-  test-version-formats:
+
+  test-runner-version-formats:
     strategy:
       fail-fast: false
       matrix:
@@ -89,3 +92,37 @@ jobs:
           runner-version: ${{ matrix.version }}
           mode: simulation
           run: echo "Testing version format ${{ matrix.version }}!"
+
+  test-go-runner-version-formats:
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - "1.0.0"
+          - "1.0.0-beta.1"
+
+    runs-on: ubuntu-latest
+    env:
+      CODSPEED_SKIP_UPLOAD: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check action with version format ${{ matrix.version }}
+        uses: ./
+        with:
+          allow-empty: true
+          go-runner-version: ${{ matrix.version }}
+          mode: walltime
+          run: echo "Testing version format ${{ matrix.version }}!"
+
+  test-config-file:
+    runs-on: ubuntu-latest
+    env:
+      CODSPEED_SKIP_UPLOAD: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: cat .github/test-codspeed.yml
+      - name: Check action with config file (no run input)
+        uses: ./
+        with:
+          mode: memory
+          config: .github/test-codspeed.yml
