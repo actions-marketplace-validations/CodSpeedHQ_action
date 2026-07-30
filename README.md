@@ -12,7 +12,7 @@ GitHub Actions for running [CodSpeed](https://codspeed.io) in your CI.
 # Usage
 
 ```yaml
-- uses: CodSpeedHQ/action@v4
+- uses: CodSpeedHQ/action@v5
   with:
     # [OPTIONAL]
     # The command used to run your CodSpeed benchmarks
@@ -23,7 +23,8 @@ GitHub Actions for running [CodSpeed](https://codspeed.io) in your CI.
     run: "<YOUR_COMMAND>"
 
     # [REQUIRED]
-    # The measurement mode to use: "simulation" (recommended), or "walltime".
+    # The measurement mode(s) to use. Possible values: "simulation" (recommended), "walltime".
+    # Accepts a single value or a comma-separated list (e.g., "simulation,walltime").
     # More details on the instruments at https://docs.codspeed.io/instruments/
     mode: "simulation"
 
@@ -77,6 +78,19 @@ GitHub Actions for running [CodSpeed](https://codspeed.io) in your CI.
     # [OPTIONAL]
     # The version of the go-runner to use (e.g., 1.0.0, 1.0.0-beta.1). If not specified, the latest version will be installed
     go-runner-version: ""
+
+    # [OPTIONAL]
+    # Improve `simulation` accuracy by weighting each instruction by its estimated cycle
+    # cost instead of charging every instruction the same fixed cost.
+    # Set to "false" to disable. Requires runner v5 or later.
+    # Defaults to "true".
+    cycle-estimation: ""
+
+    # [OPTIONAL]
+    # Exclude memory allocation time from `simulation` mode results. Set to "true" to
+    # enable. Requires runner v5 or later.
+    # Defaults to "false".
+    exclude-allocations: ""
 ```
 
 # Example usage
@@ -116,7 +130,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5
         with:
           mode: simulation
           run: pytest tests/ --codspeed
@@ -161,7 +175,7 @@ jobs:
         run: cargo codspeed build
 
       - name: Run the benchmarks
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5
         with:
           mode: simulation
           run: cargo codspeed run
@@ -201,7 +215,7 @@ jobs:
         run: npm install
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5
         with:
           mode: simulation
           run: npx vitest bench
